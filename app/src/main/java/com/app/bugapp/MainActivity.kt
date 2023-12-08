@@ -1,7 +1,10 @@
 package com.app.bugapp
 
+import android.content.Intent
 import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +28,8 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import java.io.File
+
 
 
 @DelicateCoroutinesApi
@@ -113,10 +118,47 @@ class MainActivity : ComponentActivity() {
                         Text(text = "Take bugreport")
                     }
 
+                    // ----------------------------------------------------------------------------
+                    Button(
+                        enabled = bugButtonEnabled.value,
+                        onClick = {
+                            if (bugButtonEnabled.value) {
+                                bugButtonEnabled.value = false
+                                val downloadsPath = Environment.getExternalStoragePublicDirectory(
+                                    Environment.DIRECTORY_DOWNLOADS)
+                                val buggappDirectory = File("$downloadsPath/bugapp")
+                                if ( buggappDirectory.exists() ) {
+                                    val shareIntent: Intent = Intent().apply {
+                                        action = Intent.ACTION_SEND
+                                        putExtra(Intent.EXTRA_STREAM, buggappDirectory)
+                                        type = "application/zip"
+                                    }
+                                    startActivity(Intent.createChooser(shareIntent, null))
+                                    statusText.value =
+                                        statusText.value + "\n Sharing bugreport...\n"
+                                    statusText.value =
+                                        statusText.value + "\n Success, bugreport is shared \n"
+
+                                    bugButtonEnabled.value = true
+                                }
+                                else {
+                                    statusText.value =
+                                        statusText.value + "Error, could not share to host\n"
+                                    statusText.value =
+                                        statusText.value + "Sharing failed\n"
+                                    bugButtonEnabled.value = true
+                                }
+                            }
+                        },
+                    ) {
+                        Text(text = "Sharing is caring")
+                    }
                     // LinearProgressIndicator to show the progress
                     if (loading.value) {
                         LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     }
+
+                    //------------------------------------------------------------------------------------------
                     OutlinedTextField(
                         value = statusText.value,
                         readOnly = true,
