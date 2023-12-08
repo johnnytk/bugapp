@@ -7,9 +7,11 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +33,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var adbConnection: AdbConnection
     private val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -48,7 +51,7 @@ class MainActivity : ComponentActivity() {
                 val port = remember { mutableStateOf(5555) }
                 val statusText = remember { mutableStateOf("") }
                 val bugButtonEnabled = remember { mutableStateOf(true) }
-
+                val loading = remember { mutableStateOf(false) }
                 Column (
                     verticalArrangement = Arrangement.Top,
                     horizontalAlignment = Alignment.Start,
@@ -70,15 +73,18 @@ class MainActivity : ComponentActivity() {
                         },
                         label = { Text(text = "Port") },
                     )
+
                     Button(
                         enabled = bugButtonEnabled.value,
                         onClick = {
                             if (bugButtonEnabled.value) {
                                 bugButtonEnabled.value = false
+                                // Set loading to true to show progress bar
+                                loading.value = true
                                 if ( adbConnection.connect(address.value, port.value) ) {
                                     GlobalScope.launch(Dispatchers.IO) {
                                         val mEditor = mPrefs.edit()
-                                        mEditor.putString("address", address.value).commit()
+                                        mEditor.putString("address", address.value).apply()
                                         statusText.value =
                                             statusText.value + "Collecting bugreport...\n"
 
@@ -92,6 +98,7 @@ class MainActivity : ComponentActivity() {
                                             statusText.value =
                                                 statusText.value + "Error, could not collect bugreport\n"
                                         }
+                                        loading.value = false
                                         bugButtonEnabled.value = true
                                     }
                                 }
@@ -104,6 +111,11 @@ class MainActivity : ComponentActivity() {
                         },
                     ) {
                         Text(text = "Take bugreport")
+                    }
+
+                    // LinearProgressIndicator to show the progress
+                    if (loading.value) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     }
                     OutlinedTextField(
                         value = statusText.value,
