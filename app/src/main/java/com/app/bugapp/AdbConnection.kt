@@ -73,7 +73,10 @@ class AdbConnection (private val context: Context)  {
                 return Pair(true, localFilename)
             }
         }
-        catch (ignore : Throwable) { }
+        catch (e : Throwable) {
+            Log.e(tag, "Exception in ${::bugreport.name}: ${e.message}")
+            e.printStackTrace()
+        }
         return Pair(false, "")
     }
 }
