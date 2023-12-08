@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
                         label = { Text(text = "IP address") },
                     )
                     OutlinedTextField(
-                        value = port.value.toString(),
+                        value = port.value.toString().trim(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         onValueChange = {port.value = it.toInt()
