@@ -14,20 +14,20 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
 import com.app.bugapp.ui.theme.BugappTheme
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 
 
-@DelicateCoroutinesApi
 class MainActivity : ComponentActivity() {
     private val context by lazy { application.baseContext }
     private lateinit var adbConnection: AdbConnection
@@ -46,9 +46,10 @@ class MainActivity : ComponentActivity() {
 
                 val mPrefs = getSharedPreferences("label", 0)
                 val mAddress = mPrefs.getString("address", "")
+                val coroutineScope = rememberCoroutineScope()
 
                 val address = remember { mutableStateOf(mAddress.toString()) }
-                val port = remember { mutableStateOf(5555) }
+                val port = remember { mutableIntStateOf(5555) }
                 val statusText = remember { mutableStateOf("") }
                 val bugButtonEnabled = remember { mutableStateOf(true) }
                 val loading = remember { mutableStateOf(false) }
@@ -66,10 +67,10 @@ class MainActivity : ComponentActivity() {
                         label = { Text(text = "IP address") },
                     )
                     OutlinedTextField(
-                        value = port.value.toString().trim(),
+                        value = port.intValue.toString().trim(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
-                        onValueChange = {port.value = it.toInt()
+                        onValueChange = {port.intValue = it.toInt()
                         },
                         label = { Text(text = "Port") },
                     )
@@ -81,30 +82,27 @@ class MainActivity : ComponentActivity() {
                                 bugButtonEnabled.value = false
                                 // Set loading to true to show progress bar
                                 loading.value = true
-                                if ( adbConnection.connect(address.value, port.value) ) {
-                                    GlobalScope.launch(Dispatchers.IO) {
-                                        val mEditor = mPrefs.edit()
-                                        mEditor.putString("address", address.value).apply()
-                                        statusText.value =
-                                            statusText.value + "Collecting bugreport...\n"
+                                if ( adbConnection.connect(address.value, port.intValue) ) {
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        mPrefs.edit {
+                                            putString("address", address.value)
+                                        }
+                                        statusText.value += "Collecting bugreport...\n"
 
                                         val (bugStatus, bugFileName) = adbConnection.bugreport()
                                         if (bugStatus) {
-                                            statusText.value =
-                                                statusText.value + "Success, bugreport $bugFileName saved to Downloads/bugapp\n"
+                                            statusText.value += "Success, bugreport $bugFileName saved to Downloads/bugapp\n"
                                             notification.play()
                                         }
                                         else {
-                                            statusText.value =
-                                                statusText.value + "Error, could not collect bugreport\n"
+                                            statusText.value += "Error, could not collect bugreport\n"
                                         }
                                         loading.value = false
                                         bugButtonEnabled.value = true
                                     }
                                 }
                                 else {
-                                    statusText.value =
-                                        statusText.value + "Error, could not connect to host\n"
+                                    statusText.value += "Error, could not connect to host\n"
                                     bugButtonEnabled.value = true
                                 }
                             }
@@ -120,8 +118,7 @@ class MainActivity : ComponentActivity() {
                     OutlinedTextField(
                         value = statusText.value,
                         readOnly = true,
-                        onValueChange = {statusText.value = it
-                        },
+                        onValueChange = { },
                         modifier = Modifier.fillMaxSize(),
                         label = { Text(text = "") },
                     )

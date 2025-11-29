@@ -30,7 +30,7 @@ class AdbConnection (private val context: Context)  {
             Log.w(tag, "Please accept connection request on host device")
             return false
         }
-        manager = handler as Dadb
+        manager = handler!!
         return true
     }
 
