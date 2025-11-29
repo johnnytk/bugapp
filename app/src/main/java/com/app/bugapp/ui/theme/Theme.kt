@@ -2,6 +2,7 @@ package com.app.bugapp.ui.theme
 
 import android.app.Activity
 import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -38,8 +39,7 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun BugappTheme(
-    darkTheme: Boolean = false,
-    //darkTheme: Boolean = isSystemInDarkTheme(), //FIXME Johnny dark theme doesn't work
+    darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
@@ -58,7 +58,7 @@ fun BugappTheme(
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = colorScheme.primary.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = darkTheme
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }
 

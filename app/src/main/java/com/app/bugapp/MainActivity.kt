@@ -29,7 +29,7 @@ import kotlinx.coroutines.launch
 
 
 class MainActivity : ComponentActivity() {
-    private val context by lazy { application.baseContext }
+    private val context by lazy { applicationContext }
     private lateinit var adbConnection: AdbConnection
     private val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
