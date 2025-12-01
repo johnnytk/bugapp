@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -28,6 +29,7 @@ import androidx.core.content.edit
 import com.app.bugapp.ui.theme.BugappTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 
 class MainActivity : ComponentActivity() {
@@ -55,7 +57,7 @@ class MainActivity : ComponentActivity() {
                     val address = remember { mutableStateOf(mAddress.toString()) }
                     val port = remember { mutableIntStateOf(5555) }
                     val statusText = remember { mutableStateOf("") }
-                    val bugButtonEnabled = remember { mutableStateOf(true) }
+                    val buttonsEnabled = remember { mutableStateOf(true) }
                     val loading = remember { mutableStateOf(false) }
                     Column(
                         verticalArrangement = Arrangement.Top,
@@ -78,42 +80,75 @@ class MainActivity : ComponentActivity() {
                             onValueChange = { port.intValue = it.toInt() },
                             label = { Text(text = "Port") },
                         )
-
-                        Button(
-                            enabled = bugButtonEnabled.value,
-                            onClick = {
-                                if (bugButtonEnabled.value) {
-                                    bugButtonEnabled.value = false
-                                    // Set loading to true to show progress bar
-                                    loading.value = true
-                                    if (adbConnection.connect(address.value, port.intValue)) {
+                        Row {
+                            Button(
+                                enabled = buttonsEnabled.value,
+                                onClick = {
+                                    if (buttonsEnabled.value) {
+                                        buttonsEnabled.value = false
+                                        loading.value = true
                                         coroutineScope.launch(Dispatchers.IO) {
-                                            mPrefs.edit {
-                                                putString("address", address.value)
-                                            }
-                                            statusText.value += "Collecting bugreport...\n"
+                                            if (adbConnection.connect(address.value, port.intValue)) {
+                                                mPrefs.edit {
+                                                    putString("address", address.value)
+                                                }
+                                                withContext(Dispatchers.Main) {
+                                                    statusText.value += "Collecting bugreport...\n"
+                                                }
 
-                                            val (bugStatus, bugFileName) = adbConnection.bugreport()
-                                            if (bugStatus) {
-                                                statusText.value += "Success, bugreport $bugFileName saved to Downloads/bugapp\n"
-                                                notification.play()
+                                                val (bugStatus, bugFileName) = adbConnection.bugreport()
+                                                withContext(Dispatchers.Main) {
+                                                    if (bugStatus) {
+                                                        statusText.value += "Success, bugreport saved to $bugFileName\n"
+                                                        notification.play()
+                                                    } else {
+                                                        statusText.value += "Error, could not collect bugreport\n"
+                                                    }
+                                                    loading.value = false
+                                                    buttonsEnabled.value = true
+                                                }
                                             } else {
-                                                statusText.value += "Error, could not collect bugreport\n"
+                                                withContext(Dispatchers.Main) {
+                                                    statusText.value += "Error, could not connect to host\n"
+                                                    buttonsEnabled.value = true
+                                                    loading.value = false
+                                                }
                                             }
-                                            loading.value = false
-                                            bugButtonEnabled.value = true
                                         }
-                                    } else {
-                                        statusText.value += "Error, could not connect to host\n"
-                                        bugButtonEnabled.value = true
                                     }
-                                }
-                            },
-                        ) {
-                            Text(text = "Take bugreport")
+                                },
+                            ) {
+                                Text(text = "Take bugreport")
+                            }
+                            Button(
+                                modifier = Modifier.padding(start = 10.dp),
+                                enabled = buttonsEnabled.value,
+                                onClick = {
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        withContext(Dispatchers.Main) {
+                                            buttonsEnabled.value = false
+                                            statusText.value = ""
+                                        }
+
+                                        val foundIp = adbConnection.scanForDevices(port.intValue) { progress ->
+                                            coroutineScope.launch(Dispatchers.Main) {
+                                                statusText.value += progress
+                                            }
+                                        }
+
+                                        withContext(Dispatchers.Main) {
+                                            if (foundIp != null) {
+                                                address.value = foundIp
+                                            }
+                                            buttonsEnabled.value = true
+                                        }
+                                    }
+                                },
+                            ) {
+                                Text(text = "Scan for devices")
+                            }
                         }
 
-                        // LinearProgressIndicator to show the progress
                         if (loading.value) {
                             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                         }
