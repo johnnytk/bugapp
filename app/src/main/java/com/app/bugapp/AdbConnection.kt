@@ -30,7 +30,7 @@ class AdbConnection(private val context: Context) {
         return true
     }
 
-    suspend fun scanForDevices(port: Int, progressCallback: (String) -> Unit): String? {
+    suspend fun scanForDevices(port: Int, timeout: Int, progressCallback: (String) -> Unit): String? {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val networks = connectivityManager.allNetworks
         val wifiNetworks = networks.filter {
@@ -54,7 +54,7 @@ class AdbConnection(private val context: Context) {
                         if (host == ipAddressString) continue
 
                         progressCallback("Scanning $host:$port...\n")
-                        if (isPortOpen(host, port, 100)) {
+                        if (isPortOpen(host, port, timeout)) {
                             progressCallback("Found device at $host\n")
                             return host
                         }
@@ -68,6 +68,7 @@ class AdbConnection(private val context: Context) {
     }
 
     private fun isPortOpen(ip: String, port: Int, timeout: Int): Boolean {
+        Log.d(tag, "Attempting to connect to $ip:$port")
         return try {
             val socket = Socket()
             socket.connect(InetSocketAddress(ip, port), timeout)
