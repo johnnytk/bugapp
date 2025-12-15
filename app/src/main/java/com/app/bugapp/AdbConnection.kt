@@ -3,8 +3,10 @@ package com.app.bugapp
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.os.Build
 import android.os.Environment
 import android.util.Log
+import androidx.annotation.RequiresApi
 import dadb.AdbKeyPair
 import dadb.Dadb
 import kotlinx.coroutines.Dispatchers
@@ -31,17 +33,29 @@ class AdbConnection(private val context: Context) {
         return true
     }
 
+    @Suppress("DEPRECATION")
     fun scanForDevices(port: Int, timeout: Int, progressCallback: (Pair<Int, String>) -> Unit): String? {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val networks = connectivityManager.allNetworks
-        val wifiNetworks = networks.filter {
-            connectivityManager.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        val networks = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            connectivityManager.allNetworks.mapNotNull { network ->
+                connectivityManager.getNetworkCapabilities(network)?.let { capabilities ->
+                    if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                        network
+                    } else {
+                        null
+                    }
+                }
+            }
+        } else {
+            connectivityManager.allNetworks.filter {
+                connectivityManager.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+            }
         }
 
-        if (wifiNetworks.isEmpty()) {
+        if (networks.isEmpty()) {
             progressCallback(Pair(0, "Not connected to a Wi-Fi network.\n"))
         } else {
-            for (network in wifiNetworks) {
+            for (network in networks) {
                 val linkProperties = connectivityManager.getLinkProperties(network)
                 val ipAddressString = linkProperties?.linkAddresses?.find { it.address is Inet4Address }?.address?.hostAddress
 
