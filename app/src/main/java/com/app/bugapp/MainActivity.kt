@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -31,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableIntState
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -75,6 +75,8 @@ class MainActivity : ComponentActivity() {
                 val buttonsEnabled = remember { mutableStateOf(true) }
                 val loading = remember { mutableStateOf(false) }
                 val showSettingsDialog = remember { mutableStateOf(false) }
+                val scanning = remember { mutableStateOf(false) }
+                val scanProgress = remember { mutableFloatStateOf(0f) }
 
                 Scaffold(modifier = Modifier.fillMaxSize(),
                     topBar = {
@@ -165,12 +167,15 @@ class MainActivity : ComponentActivity() {
                                     coroutineScope.launch(Dispatchers.IO) {
                                         withContext(Dispatchers.Main) {
                                             buttonsEnabled.value = false
+                                            scanning.value = true
                                             statusText.value = ""
+                                            scanProgress.floatValue = 0f
                                         }
 
-                                        val foundIp = adbConnection.scanForDevices(port.intValue, timeout.intValue) { progress ->
+                                        val foundIp = adbConnection.scanForDevices(port.intValue, timeout.intValue) { (progress, message) ->
                                             coroutineScope.launch(Dispatchers.Main) {
-                                                statusText.value += progress
+                                                scanProgress.floatValue = progress / 254f
+                                                statusText.value = message
                                             }
                                         }
 
@@ -179,6 +184,7 @@ class MainActivity : ComponentActivity() {
                                                 address.value = foundIp
                                             }
                                             buttonsEnabled.value = true
+                                            scanning.value = false
                                         }
                                     }
                                 },
@@ -189,13 +195,24 @@ class MainActivity : ComponentActivity() {
 
 
                         if (loading.value) {
-                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                            LinearProgressIndicator(modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp))
+                        } else if (scanning.value) {
+                            LinearProgressIndicator(
+                                progress = { scanProgress.floatValue },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp)
+                            )
                         }
                         OutlinedTextField(
                             value = statusText.value,
                             readOnly = true,
                             onValueChange = { },
-                            modifier = Modifier.fillMaxSize().padding(top = 8.dp),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(top = 8.dp),
                             label = { Text(text = "") },
                         )
 

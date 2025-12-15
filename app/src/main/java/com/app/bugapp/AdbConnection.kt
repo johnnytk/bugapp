@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
+import java.io.IOException
 import java.net.Inet4Address
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -30,7 +31,7 @@ class AdbConnection(private val context: Context) {
         return true
     }
 
-    suspend fun scanForDevices(port: Int, timeout: Int, progressCallback: (String) -> Unit): String? {
+    fun scanForDevices(port: Int, timeout: Int, progressCallback: (Pair<Int, String>) -> Unit): String? {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val networks = connectivityManager.allNetworks
         val wifiNetworks = networks.filter {
@@ -38,24 +39,25 @@ class AdbConnection(private val context: Context) {
         }
 
         if (wifiNetworks.isEmpty()) {
-            progressCallback("Not connected to a Wi-Fi network.\n")
+            progressCallback(Pair(0, "Not connected to a Wi-Fi network.\n"))
         } else {
             for (network in wifiNetworks) {
                 val linkProperties = connectivityManager.getLinkProperties(network)
                 val ipAddressString = linkProperties?.linkAddresses?.find { it.address is Inet4Address }?.address?.hostAddress
 
                 if (ipAddressString != null) {
-                    val prefix = ipAddressString.substring(0, ipAddressString.lastIndexOf('.') + 1)
-                    progressCallback("Scanning subnet of $ipAddressString...\n")
+                    val prefix = ipAddressString.take(ipAddressString.lastIndexOf('.') + 1)
+                    progressCallback(Pair(0,"Scanning subnet of $ipAddressString...\n"))
 
+                    val totalDevices = 254
                     // Scan the last octet from 1 to 254
-                    for (i in 1..254) {
+                    for (i in 1..totalDevices) {
                         val host = prefix + i
                         if (host == ipAddressString) continue
 
-                        progressCallback("Scanning $host:$port...\n")
+                        progressCallback(Pair(i, "Scanning $host:$port..."))
                         if (isPortOpen(host, port, timeout)) {
-                            progressCallback("Found device at $host\n")
+                            progressCallback(Pair(totalDevices, "Found device at $host\n"))
                             return host
                         }
                     }
@@ -63,7 +65,7 @@ class AdbConnection(private val context: Context) {
             }
         }
 
-        progressCallback("Scan finished. No devices found.\n")
+        progressCallback(Pair(254, "Scan finished. No devices found.\n"))
         return null
     }
 
@@ -74,7 +76,7 @@ class AdbConnection(private val context: Context) {
             socket.connect(InetSocketAddress(ip, port), timeout)
             socket.close()
             true
-        } catch (e: Exception) {
+        } catch (_: IOException) {
             false
         }
     }
