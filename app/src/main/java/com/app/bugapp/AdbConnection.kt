@@ -2,6 +2,7 @@ package com.app.bugapp
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Environment
 import android.util.Log
 import dadb.AdbKeyPair
@@ -31,29 +32,37 @@ class AdbConnection(private val context: Context) {
 
     suspend fun scanForDevices(port: Int, progressCallback: (String) -> Unit): String? {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val activeNetwork = connectivityManager.activeNetwork
-        val linkProperties = connectivityManager.getLinkProperties(activeNetwork)
+        val networks = connectivityManager.allNetworks
+        val wifiNetworks = networks.filter {
+            connectivityManager.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        }
 
-        val ipAddressString = linkProperties?.linkAddresses?.find { it.address is Inet4Address }?.address?.hostAddress
+        if (wifiNetworks.isEmpty()) {
+            progressCallback("Not connected to a Wi-Fi network.\n")
+        } else {
+            for (network in wifiNetworks) {
+                val linkProperties = connectivityManager.getLinkProperties(network)
+                val ipAddressString = linkProperties?.linkAddresses?.find { it.address is Inet4Address }?.address?.hostAddress
 
-        if (ipAddressString != null) {
-            val prefix = ipAddressString.substring(0, ipAddressString.lastIndexOf('.') + 1)
-            progressCallback("Scanning subnet of $ipAddressString...\n")
+                if (ipAddressString != null) {
+                    val prefix = ipAddressString.substring(0, ipAddressString.lastIndexOf('.') + 1)
+                    progressCallback("Scanning subnet of $ipAddressString...\n")
 
-            // Scan the last octet from 1 to 254
-            for (i in 1..254) {
-                val host = prefix + i
-                if (host == ipAddressString) continue
+                    // Scan the last octet from 1 to 254
+                    for (i in 1..254) {
+                        val host = prefix + i
+                        if (host == ipAddressString) continue
 
-                progressCallback("Scanning $host:$port...\n")
-                if (isPortOpen(host, port, 50)) {
-                    progressCallback("Found device at $host\n")
-                    return host
+                        progressCallback("Scanning $host:$port...\n")
+                        if (isPortOpen(host, port, 100)) {
+                            progressCallback("Found device at $host\n")
+                            return host
+                        }
+                    }
                 }
             }
-        } else {
-            progressCallback("Not connected to a Wi-Fi network.\n")
         }
+
         progressCallback("Scan finished. No devices found.\n")
         return null
     }
