@@ -131,7 +131,7 @@ class AdbConnection(private val context: Context) {
 
     }
 
-    fun bugreport(): Pair<Boolean, String> {
+    fun bugreport(onDownloadStarted: (String) -> Unit = {}): Pair<Boolean, String> {
         Log.w(tag, "Starting bug report..")
 
         val downloadsPath = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
@@ -151,6 +151,7 @@ class AdbConnection(private val context: Context) {
                 val file = File(buggappDirectory, localFilename)
                 val isCreated = file.createNewFile()
                 if (isCreated) {
+                    onDownloadStarted(localFilename)
                     manager.pull(file, remoteFilename)
                 }
                 manager.shell("rm $remoteFilename")
