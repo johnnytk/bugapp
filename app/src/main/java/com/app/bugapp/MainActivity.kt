@@ -67,10 +67,12 @@ class MainActivity : ComponentActivity() {
                 val mPrefs = getSharedPreferences("bugapp_prefs", 0)
                 val mAddress = mPrefs.getString("address", "")
                 val mTimeout = mPrefs.getInt("timeout", 50)
+                val mConcurrency = mPrefs.getInt("concurrency", 5)
 
                 val address = remember { mutableStateOf(mAddress.toString()) }
                 val port = remember { mutableIntStateOf(5555) }
                 val timeout = remember { mutableIntStateOf(mTimeout) }
+                val concurrency = remember { mutableIntStateOf(mConcurrency) }
                 val statusText = remember { mutableStateOf("") }
                 val buttonsEnabled = remember { mutableStateOf(true) }
                 val loading = remember { mutableStateOf(false) }
@@ -95,6 +97,7 @@ class MainActivity : ComponentActivity() {
                     if (showSettingsDialog.value) {
                         SettingsDialog(
                             timeout = timeout,
+                            concurrency = concurrency,
                             mPrefs = mPrefs,
                             onDismiss = { showSettingsDialog.value = false })
                     }
@@ -172,7 +175,11 @@ class MainActivity : ComponentActivity() {
                                             scanProgress.floatValue = 0f
                                         }
 
-                                        val foundIp = adbConnection.scanForDevices(port.intValue, timeout.intValue) { (progress, message) ->
+                                        val foundIp = adbConnection.scanForDevices(
+                                            port.intValue,
+                                            timeout.intValue,
+                                            concurrency.intValue
+                                        ) { (progress, message) ->
                                             coroutineScope.launch(Dispatchers.Main) {
                                                 scanProgress.floatValue = progress / 254f
                                                 statusText.value = message
@@ -224,7 +231,12 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun SettingsDialog(timeout: MutableIntState, mPrefs: SharedPreferences, onDismiss: () -> Unit) {
+fun SettingsDialog(
+    timeout: MutableIntState,
+    concurrency: MutableIntState,
+    mPrefs: SharedPreferences,
+    onDismiss: () -> Unit
+) {
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
@@ -246,6 +258,19 @@ fun SettingsDialog(timeout: MutableIntState, mPrefs: SharedPreferences, onDismis
                         mPrefs.edit { putInt("timeout", newTimeout) }
                     },
                     label = { Text(text = "Scan Timeout (ms)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = concurrency.intValue.toString().trim(),
+                    onValueChange = {
+                        val newConcurrency = it.toIntOrNull() ?: 5
+                        concurrency.intValue = newConcurrency
+                        mPrefs.edit { putInt("concurrency", newConcurrency) }
+                    },
+                    label = { Text(text = "Concurrent Threads") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()

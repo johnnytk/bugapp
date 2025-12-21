@@ -3,13 +3,15 @@ package com.app.bugapp
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.os.Build
 import android.os.Environment
 import android.util.Log
-import androidx.annotation.RequiresApi
 import dadb.AdbKeyPair
 import dadb.Dadb
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
@@ -17,6 +19,7 @@ import java.io.IOException
 import java.net.Inet4Address
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.util.concurrent.atomic.AtomicInteger
 
 class AdbConnection(private val context: Context) {
     private lateinit var manager: Dadb
@@ -33,58 +36,78 @@ class AdbConnection(private val context: Context) {
         return true
     }
 
-    @Suppress("DEPRECATION")
-    fun scanForDevices(port: Int, timeout: Int, progressCallback: (Pair<Int, String>) -> Unit): String? {
+    suspend fun scanForDevices(
+        port: Int,
+        timeout: Int,
+        concurrency: Int,
+        progressCallback: (Pair<Int, String>) -> Unit
+    ): String? = withContext(Dispatchers.IO) {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val networks = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            connectivityManager.allNetworks.mapNotNull { network ->
-                connectivityManager.getNetworkCapabilities(network)?.let { capabilities ->
-                    if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-                        network
-                    } else {
-                        null
-                    }
+        val networks = connectivityManager.allNetworks.mapNotNull { network ->
+            connectivityManager.getNetworkCapabilities(network)?.let { capabilities ->
+                if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                    network
+                } else {
+                    null
                 }
-            }
-        } else {
-            connectivityManager.allNetworks.filter {
-                connectivityManager.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
             }
         }
 
         if (networks.isEmpty()) {
             progressCallback(Pair(0, "Not connected to a Wi-Fi network.\n"))
-        } else {
-            for (network in networks) {
-                val linkProperties = connectivityManager.getLinkProperties(network)
-                val ipAddressString = linkProperties?.linkAddresses?.find { it.address is Inet4Address }?.address?.hostAddress
+            return@withContext null
+        }
 
-                if (ipAddressString != null) {
-                    val prefix = ipAddressString.take(ipAddressString.lastIndexOf('.') + 1)
-                    progressCallback(Pair(0,"Scanning subnet of $ipAddressString...\n"))
+        for (network in networks) {
+            val linkProperties = connectivityManager.getLinkProperties(network)
+            val ipAddressString = linkProperties?.linkAddresses?.find { it.address is Inet4Address }?.address?.hostAddress
 
-                    val totalDevices = 254
-                    // Scan the last octet from 1 to 254
-                    for (i in 1..totalDevices) {
+            if (ipAddressString != null) {
+                val prefix = ipAddressString.take(ipAddressString.lastIndexOf('.') + 1)
+                progressCallback(Pair(0, "Scanning subnet of $ipAddressString with $concurrency threads...\n"))
+
+                val totalDevices = 254
+                val semaphore = Semaphore(concurrency)
+                val progressCount = AtomicInteger(0)
+                val resultChannel = Channel<String?>(Channel.CONFLATED)
+                
+                val jobs = (1..totalDevices).map { i ->
+                    launch {
                         val host = prefix + i
-                        if (host == ipAddressString) continue
+                        if (host == ipAddressString) {
+                            val current = progressCount.incrementAndGet()
+                            progressCallback(Pair(current, "Skipping $host (self)"))
+                            if (current == totalDevices) resultChannel.trySend(null)
+                            return@launch
+                        }
 
-                        progressCallback(Pair(i, "Scanning $host:$port..."))
-                        if (isPortOpen(host, port, timeout)) {
-                            progressCallback(Pair(totalDevices, "Found device at $host\n"))
-                            return host
+                        semaphore.withPermit {
+                            val current = progressCount.incrementAndGet()
+                            progressCallback(Pair(current, "Scanning $host:$port..."))
+                            if (isPortOpen(host, port, timeout)) {
+                                resultChannel.trySend(host)
+                            } else if (current == totalDevices) {
+                                resultChannel.trySend(null)
+                            }
                         }
                     }
+                }
+
+                val foundHost = resultChannel.receive()
+                jobs.forEach { it.cancel() }
+                
+                if (foundHost != null) {
+                    progressCallback(Pair(totalDevices, "Found device at $foundHost\n"))
+                    return@withContext foundHost
                 }
             }
         }
 
         progressCallback(Pair(254, "Scan finished. No devices found.\n"))
-        return null
+        null
     }
 
     private fun isPortOpen(ip: String, port: Int, timeout: Int): Boolean {
-        Log.d(tag, "Attempting to connect to $ip:$port")
         return try {
             val socket = Socket()
             socket.connect(InetSocketAddress(ip, port), timeout)
